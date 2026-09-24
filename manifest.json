@@ -1,0 +1,19 @@
+{
+  "name": "Calculadora de Dosis Veterinaria",
+  "short_name": "Dosis Vet",
+  "description": "Calcula dosis de fármacos para perro y gato buscando por principio activo o nombre comercial.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f5f9",
+  "theme_color": "#2563eb",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

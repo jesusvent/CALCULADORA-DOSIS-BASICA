@@ -1,0 +1,515 @@
+<!--
+  Calculadora de Dosis Veterinaria
+  © 2026 Jesús Ventura. Todos los derechos reservados.
+  Software propietario — ver LICENSE en la raíz del repositorio. Queda
+  prohibida su copia, modificación, distribución o reutilización, total o
+  parcial, sin autorización previa y por escrito del autor.
+-->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Calculadora de Dosis Veterinaria</title>
+  <meta name="theme-color" content="#2563eb" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/icon.svg" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>🐾 Calculadora de Dosis Veterinaria</h1>
+      <p>Perro y gato · CIMAVET · PubMed · base de datos propia</p>
+      <p id="ultima-actualizacion" class="ultima-actualizacion"></p>
+    </header>
+
+    <nav class="tabs-principales">
+      <button class="tab-principal activa" data-vista="calculadora">Calculadora</button>
+      <button class="tab-principal" data-vista="protocolos">Protocolos</button>
+      <button class="tab-principal" data-vista="cri">CRI</button>
+      <button class="tab-principal" data-vista="cimavet">Buscador CIMAVET y CIMA</button>
+      <button class="tab-principal" data-vista="misfarmacos">Mi base de datos</button>
+    </nav>
+
+    <!-- ================= VISTA: CALCULADORA ================= -->
+    <section id="vista-calculadora" class="vista">
+
+      <div class="tarjeta">
+        <div class="cabecera-paciente">
+          <h2 class="titulo-tarjeta">Paciente</h2>
+          <button id="nuevo-paciente-boton" type="button" class="boton-secundario boton-nuevo-paciente">+ Nuevo paciente</button>
+        </div>
+        <div class="fila">
+          <div class="campo">
+            <label for="paciente-nombre">Nombre del paciente</label>
+            <input type="text" id="paciente-nombre" placeholder="Ej. Rocky" autocomplete="off" />
+          </div>
+          <div class="campo">
+            <label for="paciente-especie">Especie</label>
+            <select id="paciente-especie">
+              <option value="perro">Perro</option>
+              <option value="gato">Gato</option>
+            </select>
+          </div>
+        </div>
+        <div class="campo">
+          <label for="paciente-peso">Peso (kg)</label>
+          <input type="number" id="paciente-peso" min="0" step="0.1" placeholder="Ej. 12.5" />
+        </div>
+        <p class="ayuda" id="paciente-superficie-corporal"></p>
+      </div>
+
+      <div class="tarjeta">
+        <div class="fila fila-busqueda">
+          <div class="campo campo-busqueda">
+            <label for="busqueda">Principio activo</label>
+            <input type="text" id="busqueda" placeholder="Ej. Meloxicam, amoxicilina..." autocomplete="off" />
+            <ul id="sugerencias" class="sugerencias oculto"></ul>
+          </div>
+          <div class="campo">
+            <label for="comercial-cimavet">Nombre comercial (CIMAVET)</label>
+            <select id="comercial-cimavet" disabled>
+              <option value="">Escribe el principio activo</option>
+            </select>
+          </div>
+        </div>
+        <div id="aviso-no-en-bd" class="ayuda oculto"></div>
+
+        <button id="listado-completo-boton" type="button" class="boton-enlace">📋 Ver todos los fármacos de la base de datos</button>
+        <div id="listado-completo" class="oculto">
+          <input type="text" id="listado-completo-filtro" placeholder="Filtrar listado..." autocomplete="off" />
+          <div id="listado-completo-lista"></div>
+        </div>
+      </div>
+
+      <div id="seccion-farmaco" class="tarjeta oculto">
+        <div class="info-farmaco">
+          <button class="boton-cerrar-farmaco" id="cerrar-farmaco-boton" type="button" title="Descartar esta búsqueda y empezar una nueva">✕</button>
+          <h2 id="nombre-farmaco"></h2>
+          <p class="categoria" id="categoria-farmaco"></p>
+          <p class="comerciales oculto" id="composicion-farmaco"></p>
+          <p class="comerciales" id="nombres-comerciales"></p>
+          <p class="ayuda oculto" id="aviso-personalizado">📋 Fármaco de tu base de datos personalizada. <button class="boton-enlace" id="ir-a-editar-mifarmaco" type="button">Editarlo</button></p>
+          <div id="productos-hospital" class="oculto"></div>
+        </div>
+
+        <div id="aviso-especie" class="oculto"></div>
+
+        <nav class="subtabs">
+          <button class="subtab activa" data-panel="panel-dosis">Dosis</button>
+          <button class="subtab" data-panel="panel-cimavet-farmaco">Nombres comerciales</button>
+          <button class="subtab" data-panel="panel-bibliografia">Bibliografía</button>
+          <button class="subtab" data-panel="panel-imagenes">Imágenes</button>
+        </nav>
+
+        <div id="panel-dosis" class="panel">
+          <div id="patologia-selector-contenedor" class="campo oculto">
+            <label for="patologia-selector">Patología / indicación</label>
+            <select id="patologia-selector"></select>
+          </div>
+
+          <div class="bloque-dosis">
+            <h3 class="subtitulo">Dosis de referencia</h3>
+            <div id="resultado-referencia">
+              <p class="placeholder">Introduce el peso del paciente para calcular la dosis.</p>
+            </div>
+          </div>
+
+          <div id="bloque-uso-especifico" class="bloque-dosis oculto">
+            <h3 class="subtitulo">Dosis según uso / procedimiento</h3>
+            <div class="campo">
+              <label for="uso-especifico-selector">Uso / procedimiento</label>
+              <select id="uso-especifico-selector"></select>
+            </div>
+            <div id="resultado-uso-especifico">
+              <p class="placeholder">Introduce el peso del paciente para calcular la dosis.</p>
+            </div>
+          </div>
+
+          <div id="bloque-indicacion-antibiotico" class="bloque-dosis oculto">
+            <h3 class="subtitulo">Dosis según indicación (guías de uso de antibióticos)</h3>
+            <div class="campo">
+              <label for="indicacion-antibiotico-selector">Indicación / patología</label>
+              <select id="indicacion-antibiotico-selector"></select>
+            </div>
+            <div id="resultado-indicacion-antibiotico">
+              <p class="placeholder">Introduce el peso del paciente para calcular la dosis.</p>
+            </div>
+            <div id="notas-indicacion-antibiotico"></div>
+            <div id="alternativas-indicacion-antibiotico"></div>
+          </div>
+
+          <div class="bloque-dosis">
+            <h3 class="subtitulo">Dosis personalizada</h3>
+            <div class="fila fila-3">
+              <div class="campo">
+                <label for="dosis-personalizada-valor">Cantidad</label>
+                <input type="number" id="dosis-personalizada-valor" min="0" step="any" placeholder="Ej. 0.1" />
+              </div>
+              <div class="campo">
+                <label for="dosis-personalizada-unidad">Unidad</label>
+                <select id="dosis-personalizada-unidad">
+                  <option value="0.001">microgramos/kg (µg/kg)</option>
+                  <option value="1" selected>miligramos/kg (mg/kg)</option>
+                  <option value="1000">gramos/kg (g/kg)</option>
+                </select>
+              </div>
+            </div>
+            <div id="resultado-personalizada">
+              <p class="placeholder">Indica una cantidad para calcular la dosis personalizada.</p>
+            </div>
+          </div>
+
+          <div class="campo">
+            <label for="concentracion-cimavet">Presentación según CIMAVET (líquido o comprimidos)</label>
+            <select id="concentracion-cimavet" class="oculto"></select>
+            <p id="concentracion-cimavet-estado" class="ayuda"></p>
+            <label for="concentracion">Concentración del preparado líquido (mg/ml o UI/ml) — no aplica si administras comprimidos</label>
+            <input type="number" id="concentracion" min="0" step="0.01" placeholder="Ej. 50 (mg/ml)" />
+          </div>
+        </div>
+
+        <div id="panel-cimavet-farmaco" class="panel oculto">
+          <p class="ayuda">Medicamentos autorizados en España con este principio activo (datos en vivo de CIMAVET · AEMPS).</p>
+          <div id="cimavet-farmaco-resultado"><p class="placeholder">Cargando...</p></div>
+        </div>
+
+        <div id="panel-bibliografia" class="panel oculto">
+          <p class="ayuda">Abre una búsqueda en PubMed filtrada por fármaco, especie e indicación. Revisa los artículos y valora la dosis descrita en cada caso.</p>
+          <div id="bibliografia-botones"></div>
+          <h3 class="subtitulo">Dosis sugeridas encontradas en PubMed</h3>
+          <p class="ayuda">Búsqueda automática (en vivo) de artículos sobre este fármaco en esta especie, con las menciones de dosis (mg/kg, mcg/kg...) detectadas en el resumen de cada uno. Títulos y fragmentos traducidos automáticamente al español (traducción no profesional; el enlace lleva siempre al artículo original en inglés). Son solo sugerencias extraídas de texto libre — verifica siempre en el artículo completo antes de usar cualquier dosis.</p>
+          <div id="bibliografia-resultados"><p class="placeholder">Cargando...</p></div>
+        </div>
+
+        <div id="panel-imagenes" class="panel oculto">
+          <p class="ayuda">Guarda fotos de libros, revistas o fichas donde aparezca la dosis según la patología. Las imágenes se guardan solo en este dispositivo/navegador.</p>
+          <div class="campo">
+            <label for="imagen-descripcion">Descripción / patología (opcional)</label>
+            <input type="text" id="imagen-descripcion" placeholder="Ej. Sedación - Plumb's pág. 320" />
+          </div>
+          <label class="boton-secundario boton-subir-imagen" for="imagen-input">📷 Añadir imagen</label>
+          <input type="file" id="imagen-input" accept="image/*" multiple class="oculto" />
+          <div id="imagenes-galeria" class="imagenes-galeria"></div>
+        </div>
+      </div>
+
+      <div id="comercial-cimavet-detalle" class="tarjeta"></div>
+
+      <div class="tarjeta" id="tarjeta-resumen">
+        <h2 class="titulo-tarjeta">Resumen del paciente <span id="resumen-contador" class="contador"></span></h2>
+        <p class="solo-impresion" id="resumen-fecha-impresion"></p>
+        <div id="resumen-lista">
+          <p class="placeholder">Todavía no has añadido ningún fármaco para este paciente.</p>
+        </div>
+        <button id="imprimir-resumen" class="boton-primario oculto" type="button">🖨 Imprimir tratamiento</button>
+        <button id="vaciar-resumen" class="boton-secundario oculto">Vaciar lista</button>
+        <div id="interacciones-lista"></div>
+      </div>
+
+      <p class="disclaimer">
+        ⚠️ Herramienta de apoyo informativo. Los datos de la base de datos interna son orientativos y no sustituyen
+        el criterio clínico ni las fuentes de referencia actualizadas (ej. Plumb's Veterinary Drug Handbook).
+        Los datos de CIMAVET provienen de la API pública de la AEMPS; los de PubMed enlazan directamente a la
+        biblioteca de literatura científica. Los fármacos y dosis que añadas tú mismo en "Mi base de datos" son
+        responsabilidad tuya y se guardan solo en este dispositivo. Verifica siempre la dosis antes de administrar.
+      </p>
+    </section>
+
+    <!-- ================= VISTA: PROTOCOLOS ================= -->
+    <section id="vista-protocolos" class="vista oculto">
+      <div class="tarjeta">
+        <h2 class="titulo-tarjeta">Protocolos combinados</h2>
+        <p class="ayuda">Combinaciones de fármacos habituales según indicación (sedación, premedicación, anestesia...). Se calculan con el peso y la especie del paciente activo.</p>
+        <button id="nuevo-protocolo-boton" type="button" class="boton-primario">+ Añadir protocolo personalizado</button>
+      </div>
+
+      <div id="formulario-protocolo" class="tarjeta oculto">
+        <h3 class="titulo-tarjeta" id="formulario-protocolo-titulo">Nuevo protocolo</h3>
+        <div class="campo">
+          <label for="cp-nombre">Nombre del protocolo</label>
+          <input type="text" id="cp-nombre" placeholder="Ej. Sedación mixta a medida" />
+        </div>
+        <div class="campo">
+          <label for="cp-indicacion">Indicación (opcional)</label>
+          <input type="text" id="cp-indicacion" placeholder="Ej. Sedación" />
+        </div>
+        <div class="campo">
+          <label>Especies a las que aplica</label>
+          <div class="checkboxes-especie">
+            <label><input type="checkbox" id="cp-especie-perro" checked /> Perro</label>
+            <label><input type="checkbox" id="cp-especie-gato" checked /> Gato</label>
+          </div>
+        </div>
+        <div class="campo">
+          <label for="cp-notas">Notas (opcional)</label>
+          <input type="text" id="cp-notas" placeholder="Ej. Administrar tras premedicación" />
+        </div>
+
+        <h4 class="subtitulo">Fármacos del protocolo</h4>
+        <div id="cp-componentes-lista"></div>
+        <button id="cp-anadir-componente" type="button" class="boton-secundario">+ Añadir fármaco al protocolo</button>
+
+        <div class="fila-botones-form">
+          <button id="cp-guardar" type="button" class="boton-primario">Guardar protocolo</button>
+          <button id="cp-cancelar" type="button" class="boton-secundario">Cancelar</button>
+        </div>
+      </div>
+
+      <div class="campo campo-busqueda-protocolos">
+        <label for="protocolos-buscador">Buscar protocolo</label>
+        <input type="text" id="protocolos-buscador" placeholder="Busca por nombre, indicación o fármaco..." autocomplete="off" />
+      </div>
+
+      <div id="protocolos-lista"></div>
+    </section>
+
+    <!-- ================= VISTA: CRI (INFUSIÓN A RITMO CONSTANTE) ================= -->
+    <section id="vista-cri" class="vista oculto">
+      <div class="tarjeta">
+        <h2 class="titulo-tarjeta">CRI — Infusión a ritmo constante</h2>
+        <p class="ayuda">Usa el peso del paciente activo (pestaña Calculadora). Elige la calculadora según qué dato ya tengas fijado: la mezcla ya preparada, o el ritmo de la bomba/perfusor.</p>
+        <p class="aviso-inline oculto" id="cri-aviso-peso">Introduce el peso del paciente en la pestaña Calculadora para poder calcular.</p>
+      </div>
+
+      <div class="tarjeta">
+        <h3 class="titulo-tarjeta">Ya tengo la mezcla preparada → calcular el ritmo de la bomba</h3>
+        <p class="ayuda">Ej. "diluyo 5 ml de un vial de 20 mg/ml en una bolsa de 500 ml" → indica la concentración del vial, cuánto extraes de él, y el volumen final total de la mezcla.</p>
+        <div class="campo campo-busqueda">
+          <label for="cri-a-nombre">Fármaco (nombre comercial o principio activo)</label>
+          <input type="text" id="cri-a-nombre" placeholder="Busca en tu base de datos, CIMAVET o CIMA..." autocomplete="off" />
+          <ul class="cri-sugerencias sugerencias oculto" id="cri-a-sugerencias"></ul>
+          <p class="ayuda" id="cri-a-concentracion-estado"></p>
+        </div>
+        <div class="fila">
+          <div class="campo">
+            <label for="cri-a-unidad-farmaco">Unidad del fármaco</label>
+            <select id="cri-a-unidad-farmaco">
+              <option value="mg">mg</option>
+              <option value="UI">UI</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label for="cri-a-conc-vial">Concentración del vial (por ml)</label>
+            <input type="number" id="cri-a-conc-vial" step="any" min="0" placeholder="Ej. 100" />
+          </div>
+        </div>
+        <div class="fila">
+          <div class="campo">
+            <label for="cri-a-vol-extraido">Volumen extraído del vial (ml)</label>
+            <input type="number" id="cri-a-vol-extraido" step="any" min="0" placeholder="Ej. 5" />
+          </div>
+          <div class="campo">
+            <label for="cri-a-vol-total">Volumen TOTAL de la mezcla final (ml)</label>
+            <input type="number" id="cri-a-vol-total" step="any" min="0" placeholder="Ej. 500" />
+          </div>
+        </div>
+        <div class="fila">
+          <div class="campo">
+            <label for="cri-a-dosis-valor">Dosis deseada</label>
+            <input type="number" id="cri-a-dosis-valor" step="any" min="0" placeholder="Ej. 5" />
+          </div>
+          <div class="campo">
+            <label for="cri-a-dosis-unidad">Unidad de la dosis</label>
+            <select id="cri-a-dosis-unidad"></select>
+          </div>
+        </div>
+        <div id="cri-a-resultado" class="resultado-card oculto"></div>
+      </div>
+
+      <div class="tarjeta">
+        <h3 class="titulo-tarjeta">El ritmo de la bomba ya está fijado → calcular cuánto fármaco añadir</h3>
+        <p class="ayuda">Ej. "va a 10 ml/h en una bolsa de 250 ml de suero" → indica ese ritmo y ese volumen, y te digo cuánto fármaco tienes que añadir a la bolsa.</p>
+        <div class="campo campo-busqueda">
+          <label for="cri-b-nombre">Fármaco (nombre comercial o principio activo)</label>
+          <input type="text" id="cri-b-nombre" placeholder="Busca en tu base de datos, CIMAVET o CIMA..." autocomplete="off" />
+          <ul class="cri-sugerencias sugerencias oculto" id="cri-b-sugerencias"></ul>
+          <p class="ayuda" id="cri-b-concentracion-estado"></p>
+        </div>
+        <div class="fila">
+          <div class="campo">
+            <label for="cri-b-unidad-farmaco">Unidad del fármaco</label>
+            <select id="cri-b-unidad-farmaco">
+              <option value="mg">mg</option>
+              <option value="UI">UI</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label for="cri-b-conc-vial">Concentración del vial (por ml, opcional)</label>
+            <input type="number" id="cri-b-conc-vial" step="any" min="0" placeholder="Ej. 60" />
+          </div>
+        </div>
+        <div class="fila">
+          <div class="campo">
+            <label for="cri-b-ritmo">Ritmo de la bomba/perfusor (ml/h)</label>
+            <input type="number" id="cri-b-ritmo" step="any" min="0" placeholder="Ej. 10" />
+          </div>
+          <div class="campo">
+            <label for="cri-b-vol-total">Volumen total de la bolsa/jeringa (ml)</label>
+            <input type="number" id="cri-b-vol-total" step="any" min="0" placeholder="Ej. 250" />
+          </div>
+        </div>
+        <div class="fila">
+          <div class="campo">
+            <label for="cri-b-dosis-valor">Dosis deseada</label>
+            <input type="number" id="cri-b-dosis-valor" step="any" min="0" placeholder="Ej. 4" />
+          </div>
+          <div class="campo">
+            <label for="cri-b-dosis-unidad">Unidad de la dosis</label>
+            <select id="cri-b-dosis-unidad"></select>
+          </div>
+        </div>
+        <div id="cri-b-resultado" class="resultado-card oculto"></div>
+      </div>
+
+      <div class="tarjeta">
+        <h3 class="titulo-tarjeta">Preparar una jeringa/bolsa para que dure un tiempo determinado</h3>
+        <p class="ayuda">Ej. "quiero una jeringa de 24 ml en el perfusor que dure 24 h" → elige el fármaco, indica cuántos ml final quieres (jeringa de 12/15/20/24/48 ml, bolsa de 100 ml...) y cuántas horas debe durar, y te digo cuánto fármaco extraer y con cuánto SSF completar.</p>
+        <div class="campo campo-busqueda">
+          <label for="cri-c-nombre">Fármaco (nombre comercial o principio activo)</label>
+          <input type="text" id="cri-c-nombre" placeholder="Busca en tu base de datos, CIMAVET o CIMA..." autocomplete="off" />
+          <ul class="cri-sugerencias sugerencias oculto" id="cri-c-sugerencias"></ul>
+          <p class="ayuda" id="cri-c-concentracion-estado"></p>
+        </div>
+        <div class="campo">
+          <label for="cri-c-farmaco-lista">…o elige uno de la guía de CRI de hospitalización/UCI (rellena dosis y notas orientativas)</label>
+          <select id="cri-c-farmaco-lista">
+            <option value="">— Elige un fármaco —</option>
+          </select>
+        </div>
+        <p class="ayuda" id="cri-c-farmaco-notas"></p>
+        <div class="fila">
+          <div class="campo">
+            <label for="cri-c-unidad-farmaco">Unidad del fármaco</label>
+            <select id="cri-c-unidad-farmaco">
+              <option value="mg">mg</option>
+              <option value="UI">UI</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label for="cri-c-conc-vial">Concentración del vial (por ml)</label>
+            <input type="number" id="cri-c-conc-vial" step="any" min="0" placeholder="Ej. 0,5" />
+          </div>
+        </div>
+        <div class="fila">
+          <div class="campo">
+            <label for="cri-c-dosis-valor">Dosis deseada</label>
+            <input type="number" id="cri-c-dosis-valor" step="any" min="0" placeholder="Ej. 1" />
+          </div>
+          <div class="campo">
+            <label for="cri-c-dosis-unidad">Unidad de la dosis</label>
+            <select id="cri-c-dosis-unidad"></select>
+          </div>
+        </div>
+        <div class="fila">
+          <div class="campo">
+            <label for="cri-c-duracion">Duración deseada (h)</label>
+            <input type="number" id="cri-c-duracion" step="any" min="0" placeholder="Ej. 24" />
+          </div>
+          <div class="campo">
+            <label for="cri-c-vol-final">Volumen final de la jeringa/bolsa (ml)</label>
+            <input type="number" id="cri-c-vol-final" step="any" min="0" placeholder="Ej. 24" />
+          </div>
+        </div>
+        <div id="cri-c-resultado" class="resultado-card oculto"></div>
+        <p class="ayuda">No incluye fármacos con pauta especial no reducible a esta fórmula (bolos únicos como el manitol, mezclas ya preparadas dosificadas en ml/kg/h como el potasio, o CRI sin dosis fija publicada como el ácido tranexámico) — consulta la ficha del fármaco o la guía original para esos casos.</p>
+      </div>
+    </section>
+
+    <!-- ================= VISTA: BUSCADOR CIMAVET ================= -->
+    <section id="vista-cimavet" class="vista oculto">
+      <div class="tarjeta">
+        <h2 class="titulo-tarjeta">Buscador CIMAVET y CIMA</h2>
+        <p class="ayuda">Busca a la vez en el catálogo de medicamentos veterinarios (CIMAVET) y en el de uso humano (CIMA) autorizados en España (datos en vivo de la AEMPS, no limitados a la base de datos interna de esta app).</p>
+        <div class="campo-busqueda">
+          <input type="text" id="cimavet-busqueda" placeholder="Ej. amoxicilina, meloxicam, Metacam..." autocomplete="off" />
+        </div>
+        <button id="cimavet-buscar-boton" class="boton-primario">Buscar en CIMAVET y CIMA</button>
+      </div>
+      <div id="cimavet-resultado-general"></div>
+    </section>
+
+    <!-- ================= VISTA: MI BASE DE DATOS ================= -->
+    <section id="vista-misfarmacos" class="vista oculto">
+      <div class="tarjeta">
+        <h2 class="titulo-tarjeta">Mi base de datos de fármacos</h2>
+        <p class="ayuda">Añade cualquier medicamento con su principio activo, composición y una o varias dosis según la patología a tratar. Se guarda solo en este dispositivo/navegador y aparece también en el buscador de la Calculadora.</p>
+        <button id="nuevo-farmaco-boton" class="boton-primario">+ Añadir fármaco</button>
+      </div>
+
+      <div class="tarjeta">
+        <h2 class="titulo-tarjeta">Copia de seguridad de mis datos</h2>
+        <p class="ayuda">Tus fármacos y protocolos personalizados y tus favoritos del hospital se guardan solo en este dispositivo/navegador. Para usarlos también en otro ordenador o móvil, expórtalos aquí y luego impórtalos allí (o guarda el archivo como copia de seguridad).</p>
+        <div class="fila-botones-form">
+          <button type="button" id="exportar-datos-boton" class="boton-secundario">⬇️ Exportar mis datos</button>
+          <button type="button" id="importar-datos-boton" class="boton-secundario">⬆️ Importar datos</button>
+        </div>
+        <input type="file" id="importar-datos-input" accept="application/json" class="oculto" />
+        <p class="ayuda" id="importar-datos-estado"></p>
+      </div>
+
+      <div class="tarjeta" id="protocolos-ocultos-tarjeta">
+        <h2 class="titulo-tarjeta">Protocolos ocultados en este dispositivo</h2>
+        <p class="ayuda">Al pulsar "🗑 Eliminar" en un protocolo predefinido (pestaña Protocolos) solo se oculta en este dispositivo — no se borra del código compartido ni afecta a otros dispositivos. Puedes recuperarlo aquí.</p>
+        <div id="protocolos-ocultos-lista"></div>
+      </div>
+
+      <div id="importar-comparacion" class="tarjeta oculto">
+        <h3 class="titulo-tarjeta">⚠ El archivo a importar no incluye estos fármacos</h3>
+        <p class="ayuda" id="importar-comparacion-intro"></p>
+        <div id="importar-comparacion-lista"></div>
+        <div class="fila-botones-form">
+          <button type="button" id="importar-comparacion-continuar" class="boton-primario">Continuar importación</button>
+          <button type="button" id="importar-comparacion-cancelar" class="boton-secundario">Cancelar importación</button>
+        </div>
+      </div>
+
+      <div id="formulario-farmaco" class="tarjeta oculto">
+        <h3 class="titulo-tarjeta" id="formulario-farmaco-titulo">Nuevo fármaco</h3>
+        <div class="campo">
+          <label for="cf-comerciales">Nombres comerciales (opcional, separados por coma)</label>
+          <input type="text" id="cf-comerciales" placeholder="Ej. Clamoxyl, Synulox" />
+        </div>
+        <div class="campo">
+          <label for="cf-principio-activo">Principio activo</label>
+          <input type="text" id="cf-principio-activo" placeholder="Ej. Amoxicilina" />
+        </div>
+        <div class="campo">
+          <label for="cf-composicion">Composición</label>
+          <input type="text" id="cf-composicion" placeholder="Ej. Amoxicilina trihidrato 250 mg/comprimido" />
+        </div>
+        <div class="campo">
+          <label for="cf-categoria">Categoría (opcional)</label>
+          <input type="text" id="cf-categoria" placeholder="Ej. Antibiótico" />
+        </div>
+
+        <h4 class="subtitulo">Dosis según patología</h4>
+        <div id="cf-patologias-lista"></div>
+        <button id="cf-anadir-patologia" type="button" class="boton-secundario">+ Añadir dosis para una patología</button>
+
+        <div class="fila-botones-form">
+          <button id="cf-guardar" type="button" class="boton-primario">Guardar fármaco</button>
+          <button id="cf-cancelar" type="button" class="boton-secundario">Cancelar</button>
+        </div>
+      </div>
+
+      <div class="campo campo-busqueda-protocolos">
+        <label for="misfarmacos-buscador">Buscar en mi base de datos</label>
+        <input type="text" id="misfarmacos-buscador" placeholder="Busca por principio activo, nombre comercial, composición o categoría..." autocomplete="off" />
+      </div>
+
+      <div id="mis-farmacos-lista"></div>
+    </section>
+
+    <footer class="app-footer">
+      <p>© 2026 Jesús Ventura. Todos los derechos reservados. Software propietario de uso exclusivo autorizado — no se concede licencia de copia, modificación ni redistribución. <a href="LICENSE" target="_blank" rel="noopener">Ver licencia completa</a>.</p>
+    </footer>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="storage.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

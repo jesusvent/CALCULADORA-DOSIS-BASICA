@@ -1,0 +1,35 @@
+#!/bin/sh
+# Actualiza automaticamente ULTIMA_ACTUALIZACION_BD y VERSION_BD (data.js) cada vez que un
+# commit cambia contenido real de la base de datos compartida (farmacos en DRUGS, protocolos en
+# PROTOCOLS, productos del hospital, etc.). Sin esto habia que acordarse de bumpear la fecha (y
+# ahora tambien el numero de version) a mano en un commit aparte tras cada cambio de contenido,
+# y si se olvidaba, dos ordenadores con base de datos distinta podian mostrar la misma fecha o
+# version sin ninguna forma de detectarlo.
+#
+# Instalacion en un ordenador nuevo (una sola vez, tras clonar el repo):
+#   git config core.hooksPath hooks
+#
+# Compara el data.js que se va a commitear con el de HEAD, ignorando las propias lineas de
+# ULTIMA_ACTUALIZACION_BD y VERSION_BD (para no entrar en un bucle bumpeandose a si mismo). Si
+# hay cualquier otra diferencia, se asume que es contenido nuevo: se pone la fecha/hora actual y
+# se suma 1 al numero de version.
+
+if git diff --cached --name-only | grep -q '^data\.js$'; then
+  filtrar() { grep -v -e 'const ULTIMA_ACTUALIZACION_BD' -e 'const VERSION_BD'; }
+  staged=$(git show :data.js | filtrar)
+  anterior=$(git show HEAD:data.js 2>/dev/null | filtrar)
+
+  if [ "$staged" != "$anterior" ]; then
+    ahora=$(date '+%Y-%m-%dT%H:%M:%S')
+    version_anterior=$(git show HEAD:data.js 2>/dev/null | grep -o 'const VERSION_BD = [0-9]*' | grep -o '[0-9]*$')
+    [ -z "$version_anterior" ] && version_anterior=0
+    version_nueva=$((version_anterior + 1))
+    sed -i.bak \
+      -e "s/const ULTIMA_ACTUALIZACION_BD = \"[^\"]*\";/const ULTIMA_ACTUALIZACION_BD = \"$ahora\";/" \
+      -e "s/const VERSION_BD = [0-9]*;/const VERSION_BD = $version_nueva;/" \
+      data.js
+    rm -f data.js.bak
+    git add data.js
+    echo "pre-commit: contenido de data.js modificado -> ULTIMA_ACTUALIZACION_BD=$ahora, VERSION_BD=$version_nueva"
+  fi
+fi
