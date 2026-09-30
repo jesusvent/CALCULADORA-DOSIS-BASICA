@@ -380,6 +380,16 @@ function urlPubMedTexto(nombreBuscado, principioActivo, especie) {
   return "https://pubmed.ncbi.nlm.nih.gov/?term=" + encodeURIComponent(`${nombreTerm} AND ${especieEn}`);
 }
 
+// Búsqueda web general para productos que no son medicamento bajo ningún registro (CIMAVET ni
+// CIMA) — típicamente nutracéuticos/suplementos — donde no hay ficha técnica ni prospecto que
+// consultar. PubMed rara vez indexa la posología concreta de marcas comerciales de suplementos,
+// así que aquí interesa más encontrar la ficha del FABRICANTE (que es quien fija la pauta de un
+// producto no regulado como medicamento) que literatura científica.
+function urlBusquedaInternetDosis(nombreBuscado, especie) {
+  const especieTexto = especie === "gato" ? "gatos" : "perros";
+  return "https://www.google.com/search?q=" + encodeURIComponent(`"${nombreBuscado}" dosis ${especieTexto} mg/kg fabricante`);
+}
+
 function actualizarAvisoNoEnBd(valor, localResultados) {
   if (localResultados.length) {
     avisoNoEnBdEl.classList.add("oculto");
@@ -2182,8 +2192,9 @@ async function buscarEnCimaComoRespaldo(texto, contenedorEl, principioActivo, no
       // se conoce, ya que "texto" aquí es el principio activo usado para la consulta a
       // CIMA/CIMAVET (ej. "Caseína hidrolizada (alfa-casozepina)") y buscar solo por ese
       // texto en PubMed es mucho menos fiable que por el nombre comercial real del producto.
-      contenedorEl.innerHTML = `<p class="placeholder">"${escapeHtml(texto)}" no se ha encontrado ni como medicamento veterinario (CIMAVET) ni como medicamento de uso humano (CIMA).</p>` +
+      contenedorEl.innerHTML = `<p class="placeholder">"${escapeHtml(texto)}" no se ha encontrado ni como medicamento veterinario (CIMAVET) ni como medicamento de uso humano (CIMA). Es probable que sea un nutracéutico/suplemento sin ficha técnica ni prospecto: la dosis la fija el fabricante, no una autoridad reguladora.</p>` +
         `<a class="boton-enlace" target="_blank" rel="noopener" href="${urlPubMedTexto(nombreComercialBuscado || texto, principioActivo, paciente.especie)}">🔎 Buscar en PubMed</a>` +
+        `<a class="boton-enlace" target="_blank" rel="noopener" href="${urlBusquedaInternetDosis(nombreComercialBuscado || texto, paciente.especie)}">🔎 Buscar dosis en internet (fabricante)</a>` +
         bibliografiaHtml;
       if (!farmacoActivo) cargarBibliografiaPubMedParaTexto(terminoBibliografia, contenedorEl.querySelector(".bibliografia-busqueda-resultados"));
       return;
@@ -2199,6 +2210,19 @@ async function buscarEnCimaComoRespaldo(texto, contenedorEl, principioActivo, no
 
 function principioActivoCorto(farmaco) {
   return farmaco.principioActivo.split("/")[0];
+}
+
+// Nombres comerciales de un fármaco marcados explícitamente como "(uso humano)" en la base de
+// datos (ej. "Primperan (uso humano)"), ya limpios del sufijo, para poder buscarlos en CIMA
+// aunque el principio activo SÍ tenga alternativas veterinarias en CIMAVET (ej. metoclopramida):
+// el usuario puede tener justo ese producto humano en el hospital y necesitar su concentración
+// concreta, no la de un producto veterinario distinto.
+function nombresComercialesHumanos(farmaco) {
+  if (!farmaco) return [];
+  return farmaco.nombresComerciales
+    .filter((n) => /\(uso humano\)/i.test(n))
+    .map((n) => n.replace(/\s*\(uso humano\)\s*/i, "").trim())
+    .filter(Boolean);
 }
 
 // Descarta de un listado de CIMAVET los medicamentos que no sean EXCLUSIVAMENTE para perros
@@ -2232,6 +2256,31 @@ function filtrarCimavetPorEspecie(resultados) {
 function hayResultadoParaEspecieActiva(resultados) {
   const especieNombre = paciente.especie === "gato" ? "gato" : "perro";
   return resultados.some((m) => (m.especies || []).some((e) => normalizar(e.nombre).includes(especieNombre)));
+}
+
+// A diferencia de filtrarCimavetPorEspecie (exige que TODAS las especies del producto sean
+// perro/gato), esta solo exige que el producto SIRVA para perro o gato, sin descartarlo por
+// estar autorizado TAMBIÉN para otras especies. Para detectar la concentración de un producto ya
+// identificado por su nombre comercial concreto (ej. "Butomidor"), da igual que ese mismo
+// producto también esté autorizado para caballos: excluirlo por eso hacía que se tomara la
+// concentración de una marca totalmente distinta del mismo principio activo (ej. Torphasol 4
+// mg/ml en vez de Butomidor 10 mg/ml, porque Torphasol sí es exclusivo de perro/gato y Butomidor no).
+function incluyePerroOGato(resultados) {
+  return resultados.filter((m) => (m.especies || []).some((e) => {
+    const n = normalizar(e.nombre);
+    return n.includes("perro") || n.includes("gato");
+  }));
+}
+
+// De entre TODOS los resultados de CIMAVET para un principio activo, los que corresponden al
+// nombre comercial concreto ya elegido (ej. "Butomidor" entre los 7 productos de butorfanol),
+// para detectar SU concentración y no la de otra marca distinta. Si no hay ninguno con ese
+// nombre (puede pasar si el nombre guardado en la base de datos no coincide exactamente con el
+// de CIMAVET), se devuelve null para que quien llama recurra al filtro más genérico.
+function resultadosDelNombreComercial(resultados, nombreComercial) {
+  const n = normalizar(nombreComercial);
+  const delNombre = incluyePerroOGato(resultados.filter((m) => normalizar(m.nombre).includes(n)));
+  return delNombre.length ? delNombre : null;
 }
 
 async function cargarCimavetParaFarmaco(farmaco) {
@@ -2322,8 +2371,29 @@ async function cargarComercialesParaTexto(texto, nombreComercialBuscado) {
     const principioActivoParaFavoritos = farmacoActivo ? farmacoActivo.principioActivo : texto;
     const { lista: resultadosOrdenados, esFavorito } = marcarYOrdenarFavoritos(resultados, principioActivoParaFavoritos);
     resultados = resultadosOrdenados;
+
+    // Además de las presentaciones veterinarias, se buscan en CIMA los nombres comerciales de
+    // uso humano ya conocidos de este fármaco (ver nombresComercialesHumanos) y se añaden como
+    // opciones más del mismo desplegable, no solo como aviso aparte: aunque haya alternativa
+    // veterinaria, puede que el producto que el usuario tiene a mano sea justo el humano.
+    const nombresHumanos = nombresComercialesHumanos(farmacoActivo);
+    if (nombresHumanos.length) {
+      try {
+        const listas = await Promise.all(nombresHumanos.map((n) => buscarCima(n).catch(() => ({ resultados: [] }))));
+        if (requestId !== comercialesRequestId) return;
+        const vistos = new Set(resultados.map((m) => m.nregistro));
+        const cimaExtra = [];
+        for (const data of listas) {
+          for (const m of data.resultados || []) {
+            if (!vistos.has(m.nregistro)) { vistos.add(m.nregistro); cimaExtra.push({ ...m, _fuenteCalc: "cima" }); }
+          }
+        }
+        if (cimaExtra.length) resultados = [...resultados, ...cimaExtra];
+      } catch (e) { /* si CIMA falla, se quedan solo las opciones veterinarias */ }
+    }
+
     comercialSelect.innerHTML = `<option value="">— ${resultados.length} medicamento(s), elige uno —</option>` +
-      resultados.map((m, i) => `<option value="${i}">${esFavorito(m.nombre) ? "⭐ " : ""}${escapeHtml(m.nombre)}${m.labtitular ? " — " + escapeHtml(m.labtitular) : ""}</option>`).join("");
+      resultados.map((m, i) => `<option value="${i}">${esFavorito(m.nombre) ? "⭐ " : ""}${escapeHtml(m.nombre)}${m.labtitular ? " — " + escapeHtml(m.labtitular) : ""}${m._fuenteCalc === "cima" ? " (uso humano)" : ""}</option>`).join("");
     comercialSelect.disabled = false;
     comercialSelect._resultados = resultados;
     comercialSelect._textoBuscado = texto;
@@ -2366,7 +2436,10 @@ comercialSelect.addEventListener("change", () => {
     return;
   }
   const med = resultados[idx];
-  comercialDetalleEl.innerHTML = filaCimavetHtml(med, comercialSelect._textoBuscado);
+  const esHumano = med._fuenteCalc === "cima";
+  comercialDetalleEl.innerHTML = esHumano
+    ? filaCimaHtml(med, comercialSelect._textoBuscado)
+    : filaCimavetHtml(med, comercialSelect._textoBuscado);
 
   // Al elegir un medicamento concreto, su presentación manda sobre la detección genérica.
   const datos = datosEspecieActiva();
@@ -2378,7 +2451,7 @@ comercialSelect.addEventListener("change", () => {
     marcaComercialActiva = med.nombre;
     aplicarPresentacion(p);
     concentracionCimavetEstadoEl.textContent = `Presentación de "${med.nombre}": ${etiquetaPresentacion(p)}` +
-      (p.tipo === "solido" ? " — se calculará en fracción de comprimido." : " (CIMAVET).");
+      (p.tipo === "solido" ? " — se calculará en fracción de comprimido." : esHumano ? " (CIMA, uso humano)." : " (CIMAVET).");
   } else {
     marcaComercialActiva = null;
     concentracionCimavetEstadoEl.textContent = `No se ha podido detectar automáticamente la concentración de "${med.nombre}"; indícala manualmente si la conoces.`;
@@ -3043,11 +3116,18 @@ function renderTarjetaProtocolo(protocolo) {
     if (c.datos && presentacionAuto) {
       bloqueConcentracion = `<p class="ayuda presentacion-detectada">📐 ${escapeHtml(etiquetaPresentacion(presentacionAuto))} (detectada automáticamente, no hace falta indicarla)</p>`;
     } else if (c.datos && elegida) {
+      const opciones = (!elegida.presentacion && elegida.opciones) ? elegida.opciones : null;
       bloqueConcentracion = `
         <p class="ayuda presentacion-detectada">📐 ${escapeHtml(elegida.nombreProducto)}${elegida.presentacion ? " — " + escapeHtml(etiquetaPresentacion(elegida.presentacion)) : ""}
           <button type="button" class="boton-enlace protocolo-comp-cambiar" data-key="${escapeHtml(key)}">Cambiar</button>
         </p>` +
-        (!elegida.presentacion ? `<div class="protocolo-concentracion">
+        (opciones ? `<div class="protocolo-concentracion">
+          <label>CIMAVET tiene varias concentraciones de "${escapeHtml(elegida.nombreProducto)}": elige cuál usas</label>
+          <div class="protocolo-opciones-presentacion">
+            ${opciones.map((p, i) => `<button type="button" class="boton-secundario protocolo-elegir-presentacion" data-key="${escapeHtml(key)}" data-opcion="${i}">${escapeHtml(etiquetaPresentacion(p))}</button>`).join("")}
+          </div>
+        </div>` : "") +
+        (!elegida.presentacion && !opciones ? `<div class="protocolo-concentracion">
           <label>No se detectó la concentración de "${escapeHtml(elegida.nombreProducto)}": indícala (${unidadConc})</label>
           <input type="number" step="0.01" min="0" class="protocolo-concentracion-input" data-idx="${idx}" placeholder="Ej. 10" />
         </div>` : "");
@@ -3223,6 +3303,20 @@ function renderProtocolos() {
     btn.addEventListener("click", () => {
       delete protocoloPresentacionesElegidas[btn.dataset.key];
       renderProtocolos();
+    });
+  });
+  protocolosListaEl.querySelectorAll(".protocolo-elegir-presentacion").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.key;
+      const elegida = protocoloPresentacionesElegidas[key];
+      const opcion = elegida && elegida.opciones && elegida.opciones[Number(btn.dataset.opcion)];
+      if (!opcion) return;
+      protocoloPresentacionesElegidas[key] = { ...elegida, presentacion: opcion, opciones: null };
+      // Ver comentario en el listener de selección de producto: preserva las concentraciones
+      // manuales ya escritas en otros componentes del mismo protocolo.
+      const valoresGuardados = capturarConcentracionesManualesProtocolos();
+      renderProtocolos();
+      restaurarConcentracionesManualesProtocolos(valoresGuardados);
     });
   });
 }
@@ -3485,7 +3579,11 @@ async function buscarParaComponenteProtocolo(texto, filaEl) {
         try {
           const data = await buscarCimavet(principioActivoCorto(it.farmaco), 100);
           if (nombreInput.value !== it.nombre) return; // el usuario ha cambiado de selección mientras tanto
-          const presentaciones = extraerPresentaciones(data.resultados || []);
+          const todos = data.resultados || [];
+          // Igual que en buscarProductoParaComponenteProtocolo: se prioriza el nombre comercial
+          // concreto ya elegido, para no tomar la concentración de una marca distinta del mismo
+          // principio activo (ver comentario detallado allí).
+          const presentaciones = extraerPresentaciones(resultadosDelNombreComercial(todos, it.nombre) || todos);
           if (presentaciones.length === 1) {
             filaEl.dataset.presentacion = JSON.stringify(presentaciones[0]);
             fuenteTextoEl.textContent = "Fuente: " + etiquetaFuente(it.fuente) + ` · ${etiquetaPresentacion(presentaciones[0])} (detectada automáticamente en CIMAVET)`;
@@ -3539,7 +3637,7 @@ async function buscarProductoParaComponenteProtocolo(texto, key, contenedorEl) {
     ...localResultados.map((r) => ({
       nombre: r.termino, fuente: "local",
       detalle: r.farmaco.principioActivo !== r.termino ? r.farmaco.principioActivo : (r.farmaco.categoria || ""),
-      presentacion: null
+      presentacion: null, farmaco: r.farmaco
     })),
     ...cimavetResultados.map((m) => {
       const especies = (m.especies || []).map((e) => e.nombre).join(", ");
@@ -3582,9 +3680,40 @@ async function buscarProductoParaComponenteProtocolo(texto, key, contenedorEl) {
   `).join("");
 
   sugerenciasEl.querySelectorAll("li[data-idx]").forEach((li) => {
-    li.addEventListener("click", () => {
+    li.addEventListener("click", async () => {
       const it = items[Number(li.dataset.idx)];
-      protocoloPresentacionesElegidas[key] = { presentacion: it.presentacion, nombreProducto: it.nombre, fuente: it.fuente };
+
+      // Un producto de "tu base de datos" (ej. "Butomidor", nombre comercial de un principio
+      // activo genérico) no trae su propia concentración: antes de dar por hecho que hay que
+      // indicarla a mano, se busca en CIMAVET si ese principio activo tiene una única
+      // presentación inequívoca, igual que ya se hace al definir un componente de un protocolo
+      // NUEVO (buscarParaComponenteProtocolo) — sin esto, un fármaco de sobra conocido y con
+      // concentración única en CIMAVET (ej. butorfanol) se marcaba como "no detectada" solo
+      // por haberse encontrado primero en la base de datos local.
+      let presentacion = it.presentacion;
+      let opciones = null;
+      if (it.fuente === "local" && it.farmaco && !presentacion) {
+        li.querySelector(".submeta")?.remove();
+        li.insertAdjacentHTML("beforeend", `<span class="submeta">Buscando su concentración en CIMAVET...</span>`);
+        try {
+          const data = await buscarCimavet(principioActivoCorto(it.farmaco), 100);
+          const todos = data.resultados || [];
+          // Se prioriza el/los producto(s) con ESTE nombre comercial exacto (ej. "Butomidor"):
+          // un principio activo puede tener varias marcas a concentraciones distintas (butorfanol:
+          // Torphasol 4 mg/ml, Butomidor/Butorvet/Alvegesic/Torbugesic/Torphadine 10 mg/ml...), y
+          // tomar "la única presentación exclusiva de perro/gato" de entre TODAS las marcas daba
+          // la concentración de una marca distinta a la que el usuario acababa de elegir.
+          const candidatos = resultadosDelNombreComercial(todos, it.nombre) || filtrarCimavetPorEspecie(todos);
+          const presentaciones = extraerPresentaciones(candidatos);
+          if (presentaciones.length === 1) presentacion = presentaciones[0];
+          // Varias presentaciones distintas para el mismo producto/principio activo (ej. "Butomidor"
+          // tuviera más de una concentración registrada): en vez de rendirse y pedir indicarla a
+          // mano, se deja elegir cuál de las conocidas es la del envase que se tiene.
+          else if (presentaciones.length > 1) opciones = presentaciones;
+        } catch (e) { /* si CIMAVET falla, se deja para indicar la concentración a mano */ }
+      }
+
+      protocoloPresentacionesElegidas[key] = { presentacion, nombreProducto: it.nombre, fuente: it.fuente, opciones };
       // renderProtocolos() regenera todo el HTML de la lista de protocolos, incluidos los
       // campos de "indica la concentración manualmente" de TODOS los demás componentes que
       // aún no tienen un producto elegido — sin este guardado/restaurado, elegir un producto
