@@ -2684,7 +2684,9 @@ async function ejecutarBusquedaCimavetGeneral() {
     if (errorVet && errorHum) {
       cimavetResultadoGeneralEl.innerHTML = `<p class="aviso-inline">⚠ No se ha podido conectar ni con CIMAVET ni con CIMA ahora mismo. Comprueba tu conexión a internet e inténtalo de nuevo.</p>`;
     } else {
-      cimavetResultadoGeneralEl.innerHTML = `<p class="placeholder">"${escapeHtml(query)}" no se ha encontrado ni como medicamento veterinario (CIMAVET) ni como medicamento de uso humano (CIMA).</p>`;
+      cimavetResultadoGeneralEl.innerHTML = `<p class="placeholder">"${escapeHtml(query)}" no se ha encontrado ni como medicamento veterinario (CIMAVET) ni como medicamento de uso humano (CIMA). Es probable que sea un nutracéutico/suplemento sin ficha técnica ni prospecto: la dosis la fija el fabricante, no una autoridad reguladora.</p>` +
+        `<a class="boton-enlace" target="_blank" rel="noopener" href="${urlPubMedTexto(query, query, paciente.especie)}">🔎 Buscar en PubMed</a>` +
+        `<a class="boton-enlace" target="_blank" rel="noopener" href="${urlBusquedaInternetDosis(query, paciente.especie)}">🔎 Buscar dosis en internet (fabricante)</a>`;
     }
     return;
   }
