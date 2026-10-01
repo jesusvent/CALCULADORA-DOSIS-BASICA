@@ -385,9 +385,17 @@ function urlPubMedTexto(nombreBuscado, principioActivo, especie) {
 // consultar. PubMed rara vez indexa la posología concreta de marcas comerciales de suplementos,
 // así que aquí interesa más encontrar la ficha del FABRICANTE (que es quien fija la pauta de un
 // producto no regulado como medicamento) que literatura científica.
+// No hay forma de saber de antemano cuál es la web oficial del fabricante de un producto
+// desconocido (no hay IA de búsqueda ni directorio de marcas aquí, solo un enlace de búsqueda):
+// lo único que se puede hacer es ayudar a Google a priorizar ficha técnica/posología sobre
+// tiendas y farmacias, que es lo que copaba los primeros resultados. Las comillas alrededor del
+// nombre forzaban una coincidencia literal que arrastraba precisamente los títulos de tienda
+// ("Hyaloral Cachorros 90 Comp. | ..."); sin ellas y con -comprar/-tienda/-farmacia/-precio como
+// exclusiones, se le da más peso al contenido técnico que a los listados de venta.
 function urlBusquedaInternetDosis(nombreBuscado, especie) {
   const especieTexto = especie === "gato" ? "gatos" : "perros";
-  return "https://www.google.com/search?q=" + encodeURIComponent(`"${nombreBuscado}" dosis ${especieTexto} mg/kg fabricante`);
+  const query = `${nombreBuscado} ficha técnica posología modo de empleo dosis ${especieTexto} mg/kg -comprar -tienda -farmacia -precio -opiniones`;
+  return "https://www.google.com/search?q=" + encodeURIComponent(query);
 }
 
 function actualizarAvisoNoEnBd(valor, localResultados) {
